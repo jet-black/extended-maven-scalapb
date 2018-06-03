@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>me.jetblack</groupId>
+    <artifactId>extended-maven-scalapb</artifactId>
+    <version>0.0.1</version>
+
+    <properties>
+        <generated.sources.location>${project.build.directory}/generated-sources</generated.sources.location>
+        <generated.sources.protobuf.location>${generated.sources.location}/protobuf
+        </generated.sources.protobuf.location>
+        <proto.files.location>${project.basedir}/proto</proto.files.location>
+        <scala.major.version>2.12</scala.major.version>
+        <scala.version>2.12.5</scala.version>
+        <scalapb.version>0.7.3</scalapb.version>
+        <protobuf.raw.version>351</protobuf.raw.version>
+        <protobuf.version>3.5.1</protobuf.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>${protobuf.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
+            <version>${protobuf.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.thesamet.scalapb</groupId>
+            <artifactId>scalapb-runtime_${scala.major.version}</artifactId>
+            <version>${scalapb.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.thesamet.scalapb</groupId>
+            <artifactId>scalapbc_${scala.major.version}</artifactId>
+            <version>${scalapb.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <sourceDirectory>src/main/scala</sourceDirectory>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>1.12</version>
+                <executions>
+                    <execution>
+                        <id>add-java-source</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${generated.sources.protobuf.location}/java</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>add-scala-source</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${generated.sources.protobuf.location}/scala</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>2.10</version>
+                <executions>
+                    <execution>
+                        <id>copy-protoc</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <includeGroupIds>
+                                com.thesamet.scalapb,
+                                org.scala-lang,
+                                com.google.protobuf,
+                                com.github.os72
+                            </includeGroupIds>
+                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>extract-google-proto-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>com.google.protobuf</groupId>
+                                    <artifactId>protobuf-java</artifactId>
+                                </artifactItem>
+                            </artifactItems>
+                            <includes>**/*.proto</includes>
+                            <outputDirectory>${project.build.directory}/lib/google-proto-src/</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.7</version>
+                <executions>
+                    <execution>
+                        <id>exec-protoc</id>
+                        <phase>generate-sources</phase>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${generated.sources.protobuf.location}/java"/>
+                                <mkdir dir="${generated.sources.protobuf.location}/scala"/>
+                                <path id="protobuf.input.filepaths.path">
+                                    <fileset dir="${proto.files.location}">
+                                        <include name="**/*.proto"/>
+                                    </fileset>
+                                </path>
+                                <pathconvert pathsep=" " property="protobuf.input.filepaths"
+                                             refid="protobuf.input.filepaths.path"/>
+                                <path id="protomodel.path">
+                                    <pathelement path="${proto.files.location}"/>
+                                </path>
+                                <pathconvert property="protomodel.normalized.path" refid="protomodel.path"/>
+                                <java classname="scalapb.ScalaPBC"
+                                      failonerror="true" fork="true">
+                                    <classpath>
+                                        <fileset dir="${project.build.directory}/lib">
+                                            <include name="**/*.jar"/>
+                                        </fileset>
+                                    </classpath>
+                                    <arg value="--throw"/>
+                                    <arg value="-v${protobuf.raw.version}"/>
+                                    <arg value="--proto_path=${protomodel.normalized.path}"/>
+                                    <arg value="--proto_path=${project.build.directory}/lib/google-proto-src"/>
+                                    <arg value="--scala_out=java_conversions:${generated.sources.protobuf.location}/scala"/>
+                                    <arg value="--java_out=${generated.sources.protobuf.location}/java"/>
+                                    <arg line="${protobuf.input.filepaths}"/>
+                                </java>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.1</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>net.alchim31.maven</groupId>
+                <artifactId>scala-maven-plugin</artifactId>
+                <configuration>
+                    <recompileMode>incremental</recompileMode>
+                    <useZincServer>true</useZincServer>
+                    <scalaCompatVersion>${scala.major.version}</scalaCompatVersion>
+                    <scalaVersion>${scala.version}</scalaVersion>
+                    <args>
+                        <arg>-unchecked</arg>
+                        <arg>-deprecation</arg>
+                        <arg>-explaintypes</arg>
+                        <arg>-feature</arg>
+                        <arg>-Xlint:_,-unused</arg>
+                        <arg>-Ywarn-unused:imports</arg>
+                        <arg>-target:jvm-1.8</arg>
+                        <arg>-Ybackend-parallelism</arg>
+                        <arg>8</arg>
+                    </args>
+                    <jvmArgs>
+                        <jvmArg>-Xmx2g</jvmArg>
+                        <jvmArg>-Xss2M</jvmArg>
+                    </jvmArgs>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>compile</goal>
+                            <goal>testCompile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+
+    </build>
+
+</project>
